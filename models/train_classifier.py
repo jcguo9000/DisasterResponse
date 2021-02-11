@@ -1,24 +1,99 @@
 import sys
 
+#import libraries
+
+import sqlalchemy as db
+
+import nltk
+nltk.download(['punkt', 'wordnet', 'averaged_perceptron_tagger'])
+
+import re
+import numpy as np
+import pandas as pd
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+
+from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline, FeatureUnion
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+from sklearn.multioutput import MultiOutputClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import classification_report
+
+
 
 def load_data(database_filepath):
-    pass
+    
+    #creat engine and connnection to the sql database
+    engine = db.create_engine(str('sqlite:///'+database_filepath))
+    connection = engine.connect()
+    
+    #load sql database to panda dataframe
+
+    df = pd.read_sql(str("SELECT * FROM "+database_filepath[5:-3]), con=connection)
+    # set 'message' column as X, and set all of the categorical columns as y
+    X = df['message']
+    y = df[df.columns[4:]]
+    category_names = list(df.columns[4:])
+    
+    return X, y, category_names
+    
 
 
 def tokenize(text):
-    pass
+    #tokenized sentences
+    tokens = word_tokenize(text)
+    #create lammatizer
+    lemmatizer = WordNetLemmatizer()
+    
+    clean_tokens = []
+    for tok in tokens:
+        #lower case, lammatize and remove 
+        clean_tok = lemmatizer.lemmatize(tok).lower().strip()
+        #append to clean_tok list
+        clean_tokens.append(clean_tok)
+    #return the cleaned tokens
+    return clean_tokens
 
 
 def build_model():
-    pass
+    
+    #build pipeline
+    pipeline = Pipeline([
+    ('vect', CountVectorizer(tokenizer=tokenize)),
+    ('tfidf', TfidfTransformer()),
+    ('clf', MultiOutputClassifier(KNeighborsClassifier()))
+    ])
+    
+    #set parameters for GridSearch # only selected 2 here to reduce program processing time
+    parameters = {
+        'vect__max_features': (None,5000),
+        'tfidf__smooth_idf': (True, False),
+    }
+    
+    cv = GridSearchCV(pipeline, param_grid=parameters)
 
+    return cv
 
 def evaluate_model(model, X_test, Y_test, category_names):
-    pass
+    y_pred = model.predict(X_test)
+    
+    n = 0
+    for col in category_names:
+        print(col)
+        print(classification_report(y_test[col], y_pred[:,n]))
+        n+=1
 
+    print("\nBest Parameters:", model.best_params_)
 
 def save_model(model, model_filepath):
-    pass
+    import pickle
+    filename = 'finalized_model.pkl'
+    pickle.dump(model, open(filename, 'wb'))
 
 
 def main():
